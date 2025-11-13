@@ -1,50 +1,70 @@
+const CACHE_NAME = "printer-app-v1";
 
-const CACHE_NAME = 'printer-app-v1'
-const URLS_TO_CACHE = [
+// Minimal precache (App Shell)
+const PRECACHE_URLS = [
   '/',
-  '/ui',  // Your current page route
-  // Nordcraft will generate these - you'll need to identify them:
-  '/main.css',
-  '/main.js',
-  // Add any other static assets
-]
-// Install event - cache resources
-self.addEventListener('install', (event) => {
+  '/index.html',
+];
+
+self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
-      })
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(PRECACHE_URLS);
+    })
   );
+  self.skipWaiting();
 });
 
-// Fetch event - serve from cache, fallback to network
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Cache hit - return response
-        if (response) {
-          return response;
-        }
-        return fetch(event.request);
-      }
-    )
-  );
-});
-
-// Activate event - clean up old caches
-self.addEventListener('activate', (event) => {
+self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
+    caches.keys().then((names) => {
       return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
+        names.map((name) => {
+          if (name !== CACHE_NAME) return caches.delete(name);
         })
       );
+    })
+  );
+  self.clients.claim();
+});
+
+// FETCH — Toddle-kompatible Strategie
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+
+  // Nur GET
+  if (req.method !== "GET") return;
+
+  // 1) Navigation: network first
+  if (req.mode === "navigate") {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, res.clone()));
+          return res;
+        })
+        .catch(async () => {
+          return (await caches.match(req)) || (await caches.match('/index.html'));
+        })
+    );
+    return;
+  }
+
+  // 2) Assets (CSS, JS, images, fonts): cache first + dynamic cache
+  event.respondWith(
+    caches.match(req).then((cached) => {
+      if (cached) return cached;
+
+      return fetch(req)
+        .then((res) => {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
+          return res;
+        })
+        .catch(() => {
+          // Wenn offline und nichts im Cache → Fehler
+          return new Response("", { status: 504, statusText: "Offline" });
+        });
     })
   );
 });
