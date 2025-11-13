@@ -1,10 +1,13 @@
-const CACHE_NAME = 'my-app-cache-v1';
-const urlsToCache = [
-  '/',
-  '/index.html',
-  // Add your CSS, JS, and other assets here
-];
 
+const CACHE_NAME = 'printer-app-v1'
+const URLS_TO_CACHE = [
+  '/',
+  '/ui',  // Your current page route
+  // Nordcraft will generate these - you'll need to identify them:
+  '/main.css',
+  '/main.js',
+  // Add any other static assets
+]
 // Install event - cache resources
 self.addEventListener('install', (event) => {
   event.waitUntil(
