@@ -1,68 +1,47 @@
-// ---- Konfig
-const BASE = '/ui/';
-const VERSION = 'v1';
-const CACHE = `printer-ui-${VERSION}`;
-const ASSETS = [
-  `${BASE}`,
-  `${BASE}index.html`,
-  `${BASE}manifest.json`,
-  // füge deine gebauten Assets hinzu (falls vorhanden):
-  // `${BASE}app.js`,
-  // `${BASE}app.css`,
-  `${BASE}android-chrome-192x192.png`,
-  `${BASE}android-chrome-512x512.png`
+const CACHE_NAME = 'my-app-cache-v1';
+const urlsToCache = [
+  '/',
+  '/index.html',
+  // Add your CSS, JS, and other assets here
 ];
 
-// Install: App-Shell precachen
-self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
-  self.skipWaiting();
+// Install event - cache resources
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => {
+        console.log('Opened cache');
+        return cache.addAll(urlsToCache);
+      })
+  );
 });
 
-// Activate: alte Caches löschen
-self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.map(k => k.startsWith('printer-ui-') && k !== CACHE ? caches.delete(k) : null))
+// Fetch event - serve from cache, fallback to network
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    caches.match(event.request)
+      .then((response) => {
+        // Cache hit - return response
+        if (response) {
+          return response;
+        }
+        return fetch(event.request);
+      }
     )
   );
-  self.clients.claim();
 });
 
-// Fetch-Strategien
-self.addEventListener('fetch', (e) => {
-  const req = e.request;
-
-  // SPA-Navigation -> immer index.html aus Cache
-  if (req.mode === 'navigate') {
-    e.respondWith(
-      caches.match(`${BASE}index.html`, { ignoreSearch: true })
-        .then(r => r || fetch(req))
-    );
-    return;
-  }
-
-  // Gleich-Origin-Assets: Cache-first, dann Netz
-  const sameOrigin = new URL(req.url).origin === location.origin;
-  if (sameOrigin) {
-    e.respondWith(
-      caches.match(req).then(cached =>
-        cached || fetch(req).then(net => {
-          const copy = net.clone();
-          caches.open(CACHE).then(c => c.put(req, copy));
-          return net;
+// Activate event - clean up old caches
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            return caches.delete(cacheName);
+          }
         })
-      )
-    );
-    return;
-  }
-
-  // Externe Ressourcen: Network-first, Fallback Cache
-  e.respondWith(
-    fetch(req).then(net => {
-      const copy = net.clone();
-      caches.open(CACHE).then(c => c.put(req, copy));
-      return net;
-    }).catch(() => caches.match(req))
+      );
+    })
   );
 });
